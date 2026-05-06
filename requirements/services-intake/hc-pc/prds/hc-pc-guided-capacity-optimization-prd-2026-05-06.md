@@ -33,6 +33,7 @@ If a field does not apply, write N/A.
 | --- | --- | --- |
 | 06-May-2026 | Copilot + PM Draft | Initial draft from service PRD template |
 | 06-May-2026 | HC-PC PM | Added requirements and workflow details |
+| 06-May-2026 | HC-PC PM | Added pilot validation detail and sync verification update |
 
 ## 1. Executive Summary
 

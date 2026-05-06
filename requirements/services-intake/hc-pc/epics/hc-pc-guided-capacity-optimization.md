@@ -7,7 +7,7 @@ HC-PC platform operators lack a consistent, proactive way to detect under-provis
 **Context **(optional)**:**
 
 - Business objective: Reduce reactive capacity incidents and improve infrastructure efficiency in HC-PC deployments.
-- Previous work done: Existing health and telemetry dashboards provide fragmented indicators without guided remediation.
+- Previous work done: Existing health and telemetry dashboards provide fragmented indicators without guided remediation; pilot tenant feedback validated need for guided right-sizing recommendations.
 - PRD link: requirements/services-intake/hc-pc/prds/hc-pc-guided-capacity-optimization-prd-2026-05-06.md
 
 **Goal:**
