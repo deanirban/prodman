@@ -156,11 +156,25 @@ jobs:
             NOTE_BODY_HTML=$(printf "<!-- %s -->\n<!-- AHA_SYNC_KIND:prd -->\n%s" "$SOURCE_MARKER" "$NOTE_BODY_HTML")
 
             EXISTING_PAGE_ID=""
-            for page in $(seq 1 5); do
-              PAGES_LIST=$(curl -s \
+            LOOKUP_FAILED=0
+            for page in $(seq 1 50); do
+              PAGES_RESP=$(curl -s -w "\n%{http_code}" \
                 -H "Authorization: Bearer $AHA_API_TOKEN" \
                 -H "Content-Type: application/json" \
                 "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages?per_page=200&page=${page}")
+              PAGES_HTTP_CODE=$(echo "$PAGES_RESP" | tail -n1)
+              PAGES_LIST=$(echo "$PAGES_RESP" | head -n -1)
+
+              if [ "$PAGES_HTTP_CODE" -lt 200 ] || [ "$PAGES_HTTP_CODE" -ge 300 ]; then
+                echo "Failed to list existing Aha pages for upsert lookup (HTTP $PAGES_HTTP_CODE): $PAGES_LIST"
+                LOOKUP_FAILED=1
+                break
+              fi
+
+              PAGE_COUNT=$(echo "$PAGES_LIST" | jq -r '(.pages // []) | length')
+              if [ "$PAGE_COUNT" = "0" ]; then
+                break
+              fi
 
               MATCH=$(echo "$PAGES_LIST" | jq -r --arg marker "$SOURCE_MARKER" --arg source_url "$REPO_FILE_URL" --arg note_name "$NOTE_NAME" '
                 [(.pages // [])[]?] as $items
@@ -184,6 +198,11 @@ jobs:
                 break
               fi
             done
+
+            if [ "$LOOKUP_FAILED" -eq 1 ]; then
+              FAILED=1
+              continue
+            fi
 
             # Keep PRD notes at workspace root and preserve markdown rendering via HTML body.
             PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg html "$NOTE_BODY_HTML" \
