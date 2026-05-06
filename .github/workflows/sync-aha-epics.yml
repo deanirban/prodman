@@ -212,7 +212,7 @@ jobs:
             fi
 
             # Parse H1 heading as the epic name; fall back to the filename
-            EPIC_NAME=$(grep -m1 '^# ' "$file" | sed 's/^# //' | xargs)
+            EPIC_NAME=$(grep -m1 '^[[:space:]]*# ' "$file" | sed 's/^[[:space:]]*# //' | xargs)
             if [ -z "$EPIC_NAME" ]; then
               EPIC_NAME=$(basename "$file" .md)
             fi
@@ -232,6 +232,8 @@ jobs:
               -H "Content-Type: application/json" \
               "https://api.github.com/markdown" \
               -d "$RENDER_REQ")
+            # Ensure source marker survives rendering and is always searchable during upserts.
+            EPIC_DESC_HTML=$(printf "<!-- %s -->\n<!-- AHA_SYNC_KIND:epic -->\n%s" "$SOURCE_MARKER" "$EPIC_DESC_HTML")
 
             EXISTING_EPIC_ID=""
             EXISTING_EPIC_REF=""
@@ -242,10 +244,20 @@ jobs:
                 -H "Content-Type: application/json" \
                 "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/epics?per_page=200&page=${page}")
 
-              MATCH=$(echo "$EPICS_LIST" | jq -r --arg marker "$SOURCE_MARKER" --arg source_url "$REPO_FILE_URL" '
+              MATCH=$(echo "$EPICS_LIST" | jq -r --arg marker "$SOURCE_MARKER" --arg source_url "$REPO_FILE_URL" --arg epic_name "$EPIC_NAME" '
                 [(.epics // [])[]?] as $items
-                | (($items | map(select((.description // "") | contains($marker))) | first)
-                   // ($items | map(select((.description // "") | contains($source_url))) | first))
+                | def text_blob:
+                    [
+                      (.description // ""),
+                      (.description_body // ""),
+                      (.body // ""),
+                      (.description_attributes.body // "")
+                    ]
+                    | map(select(type == "string"))
+                    | join("\n");
+                | (($items | map(select((text_blob | contains($marker)))) | first)
+                   // ($items | map(select((text_blob | contains($source_url)))) | first)
+                   // ($items | map(select((.name // "") == $epic_name)) | first))
                 | if . then @base64 else empty end')
 
               if [ -n "$MATCH" ]; then
