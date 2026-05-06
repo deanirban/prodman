@@ -1,0 +1,200 @@
+name: Sync to Aha PRD Notes
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths:
+      # services-intake
+      - 'requirements/services-intake/hc-pc/prds/*.md'
+      - 'requirements/services-intake/ideas-portal/prds/*.md'
+      - 'requirements/services-intake/aruba/prds/*.md'
+      - 'requirements/services-intake/compute-hpc-ai/prds/*.md'
+      - 'requirements/services-intake/com-nonstop/prds/*.md'
+      - 'requirements/services-intake/flex/prds/*.md'
+      - 'requirements/services-intake/hc-dscc/prds/*.md'
+      - 'requirements/services-intake/hc-storage/prds/*.md'
+      - 'requirements/services-intake/juniper-datacenter/prds/*.md'
+      - 'requirements/services-intake/opsramp/prds/*.md'
+      - 'requirements/services-intake/pointnext/prds/*.md'
+      # capabilities
+      - 'requirements/capabilities/api-cli-framework/prds/*.md'
+      - 'requirements/capabilities/commerce/prds/*.md'
+      - 'requirements/capabilities/compliance-certification/prds/*.md'
+      - 'requirements/capabilities/consumption-analytics/prds/*.md'
+      - 'requirements/capabilities/consumption-data-services/prds/*.md'
+      - 'requirements/capabilities/data-analytics/prds/*.md'
+      - 'requirements/capabilities/device-subscription-management/prds/*.md'
+      - 'requirements/capabilities/high-availability/prds/*.md'
+      - 'requirements/capabilities/on-prem/prds/*.md'
+      - 'requirements/capabilities/partner-management/prds/*.md'
+      - 'requirements/capabilities/platform-architecture/prds/*.md'
+      - 'requirements/capabilities/security/prds/*.md'
+      - 'requirements/capabilities/sustainability/prds/*.md'
+      - 'requirements/capabilities/ui-ux-framework/prds/*.md'
+      - 'requirements/capabilities/unified-support-experience/prds/*.md'
+      - 'requirements/capabilities/user-account-management/prds/*.md'
+
+jobs:
+  create-aha-prd-notes:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find added/modified PRD files
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only --diff-filter=AM \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            | grep -E '^requirements/(services-intake/(hc-pc|ideas-portal|aruba|compute-hpc-ai|com-nonstop|flex|hc-dscc|hc-storage|juniper-datacenter|opsramp|pointnext)|capabilities/(api-cli-framework|commerce|compliance-certification|consumption-analytics|consumption-data-services|data-analytics|device-subscription-management|high-availability|on-prem|partner-management|platform-architecture|security|sustainability|ui-ux-framework|unified-support-experience|user-account-management))/prds/.+\.md$' || true)
+          echo "Found files:"
+          echo "$CHANGED"
+          {
+            echo "files<<EOF"
+            echo "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Aha PRD Notes
+        if: steps.changed.outputs.files != ''
+        env:
+          AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
+          AHA_DOMAIN: hpepm.aha.io
+        run: |
+          set -euo pipefail
+
+          # Folder -> Aha workspace prefix
+          declare -A WORKSPACE_MAP
+          # services-intake
+          WORKSPACE_MAP["hc-pc"]="GLCP17"
+          WORKSPACE_MAP["ideas-portal"]="GLCP13"
+          WORKSPACE_MAP["aruba"]="GLCP16"
+          WORKSPACE_MAP["compute-hpc-ai"]="GLCP19"
+          WORKSPACE_MAP["com-nonstop"]="GLCP50"
+          WORKSPACE_MAP["flex"]="GLCP49"
+          WORKSPACE_MAP["hc-dscc"]="GLCP47"
+          WORKSPACE_MAP["hc-storage"]="GLCP18"
+          WORKSPACE_MAP["juniper-datacenter"]="GLCP51"
+          WORKSPACE_MAP["opsramp"]="GLCP32"
+          WORKSPACE_MAP["pointnext"]="GLCP20"
+          # capabilities
+          WORKSPACE_MAP["api-cli-framework"]="GLCP10"
+          WORKSPACE_MAP["commerce"]="GLCP2"
+          WORKSPACE_MAP["compliance-certification"]="GLCP4"
+          WORKSPACE_MAP["consumption-analytics"]="GLCP36"
+          WORKSPACE_MAP["consumption-data-services"]="GLCP37"
+          WORKSPACE_MAP["data-analytics"]="GLCP5"
+          WORKSPACE_MAP["device-subscription-management"]="GLCP45"
+          WORKSPACE_MAP["high-availability"]="GLCP11"
+          WORKSPACE_MAP["on-prem"]="GLCP8"
+          WORKSPACE_MAP["partner-management"]="GLCP7"
+          WORKSPACE_MAP["platform-architecture"]="GLCP12"
+          WORKSPACE_MAP["security"]="GLCP9"
+          WORKSPACE_MAP["sustainability"]="GLCP35"
+          WORKSPACE_MAP["ui-ux-framework"]="GLCP3"
+          WORKSPACE_MAP["unified-support-experience"]="GLCP6"
+          WORKSPACE_MAP["user-account-management"]="GLCP1"
+
+          # Optional overrides for parent PRD pages by workspace.
+          # Fallback order if not found:
+          # 1) override value
+          # 2) <workspace>-N-4
+          # 3) <workspace>-N-3
+          declare -A PRD_PARENT_PAGE_REF_OVERRIDE
+          PRD_PARENT_PAGE_REF_OVERRIDE["GLCP17"]="GLCP17-N-4"
+
+          find_page_id() {
+            local page_ref="$1"
+            local response
+            response=$(curl -s -w "\n%{http_code}" \
+              -H "Authorization: Bearer $AHA_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://${AHA_DOMAIN}/api/v1/pages/${page_ref}")
+            local code
+            code=$(echo "$response" | tail -n1)
+            local body
+            body=$(echo "$response" | head -n -1)
+
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+              echo "$body" | jq -r '.page.id // ""'
+            else
+              echo ""
+            fi
+          }
+
+          FAILED=0
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            echo "------------------------------------------"
+            echo "Processing PRD: $file"
+
+            FOLDER=$(echo "$file" | cut -d'/' -f3)
+            WORKSPACE_ID="${WORKSPACE_MAP[$FOLDER]:-}"
+
+            if [ -z "$WORKSPACE_ID" ]; then
+              echo "No workspace mapping for folder '$FOLDER' - skipping"
+              continue
+            fi
+
+            NOTE_NAME=$(grep -m1 '^# ' "$file" | sed 's/^# //' | xargs)
+            if [ -z "$NOTE_NAME" ]; then
+              NOTE_NAME=$(basename "$file" .md)
+            fi
+
+            REPO_FILE_URL="https://github.com/${{ github.repository }}/blob/main/${file}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            PR_URL="${{ github.event.pull_request.html_url }}"
+
+            FILE_BODY=$(cat "$file")
+            NOTE_BODY=$(printf "Source file: %s\nMerged PR: #%s (%s)\n\n%s" "$REPO_FILE_URL" "$PR_NUMBER" "$PR_URL" "$FILE_BODY")
+
+            PARENT_REF_OVERRIDE="${PRD_PARENT_PAGE_REF_OVERRIDE[$WORKSPACE_ID]:-}"
+            CANDIDATE_ONE="${PARENT_REF_OVERRIDE:-${WORKSPACE_ID}-N-4}"
+            CANDIDATE_TWO="${WORKSPACE_ID}-N-3"
+
+            PARENT_ID=""
+            PARENT_ID=$(find_page_id "$CANDIDATE_ONE")
+            if [ -z "$PARENT_ID" ] && [ "$CANDIDATE_TWO" != "$CANDIDATE_ONE" ]; then
+              PARENT_ID=$(find_page_id "$CANDIDATE_TWO")
+            fi
+
+            if [ -z "$PARENT_ID" ]; then
+              echo "Warning: No parent page found for $WORKSPACE_ID using ${CANDIDATE_ONE} or ${CANDIDATE_TWO}; creating top-level note"
+              PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg body "$NOTE_BODY" \
+                '{page:{name:$name, description:{body:$body}}}')
+            else
+              echo "Parent page resolved for $WORKSPACE_ID: $PARENT_ID"
+              PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg body "$NOTE_BODY" --arg parent_id "$PARENT_ID" \
+                '{page:{name:$name, description:{body:$body}, parent_id:$parent_id}}')
+            fi
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST \
+              -H "Authorization: Bearer $AHA_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages" \
+              -d "$PAYLOAD")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              REF=$(echo "$BODY" | jq -r '.page.reference_num // "unknown"')
+              URL=$(echo "$BODY" | jq -r '.page.url // ""')
+              echo "Created PRD note ${REF} -> ${URL}"
+            else
+              echo "Failed to create note for $file (HTTP $HTTP_CODE): $BODY"
+              FAILED=1
+            fi
+
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          exit $FAILED

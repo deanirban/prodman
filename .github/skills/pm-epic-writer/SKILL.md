@@ -36,6 +36,25 @@ Use both for best results:
 - "Author/start/create an epic"
 - "Review my epic / improve this epic"
 - The PM opens or edits a file under `requirements/*/*/epics/*.md`
+- "Help me write a PRD" for capabilities or service-intake folders
+
+## PRD mode support
+
+This skill also supports PRD authoring in `requirements/*/*/prds/*.md`.
+
+- Capabilities PRD template source in repo:
+  `.github/PRD_TEMPLATE_CAPABILITIES.md`
+- Service-intake PRD template source in repo:
+  `.github/PRD_TEMPLATE_SERVICE.md`
+
+Routing rule:
+
+1. If path includes `requirements/capabilities/.../prds/`, use the
+  capabilities template.
+2. If path includes `requirements/services-intake/.../prds/`, use the
+  service template.
+3. Keep all headings and field prompts from the selected template. If a field
+  is not applicable, fill `N/A` rather than deleting the field.
 
 ## Mandatory sections (PR validator enforces these)
 
