@@ -165,6 +165,32 @@ jobs:
           RELEASE_ID_MAP["GLCP45"]="7129836891028171763"   # GLCP45-R-1 Parking lot  | Device Subscription Management
           # ─────────────────────────────────────────────────────────────────
 
+          # ── Product prefix → "Jira Cloud GLRP Project" integration ID ────
+          # Capabilities only. Service-intake epics are not auto-sent to Jira;
+          # PMs move them to a capability workspace first.
+          # Workspaces with their own GLRP integration use option (a).
+          # Workspaces without one fall back to the shared GLCP34-owned
+          # integration (option b: 7582498889015567350).
+          declare -A JIRA_INTEGRATION_MAP
+          JIRA_INTEGRATION_MAP["GLCP3"]="7584038513961762772"   # UI / UX Framework  (own)
+          JIRA_INTEGRATION_MAP["GLCP4"]="7584038598058142307"   # Compliance & Certification (own)
+          JIRA_INTEGRATION_MAP["GLCP7"]="7584038875719434886"   # Partner Management (own)
+          JIRA_INTEGRATION_MAP["GLCP8"]="7584039006769859256"   # On-Prem (own)
+          JIRA_INTEGRATION_MAP["GLCP9"]="7584039081357109543"   # Security (own)
+          JIRA_INTEGRATION_MAP["GLCP10"]="7584039156118451260"  # API / CLI Framework (own)
+          JIRA_INTEGRATION_MAP["GLCP12"]="7584039365277759498"  # Platform Architecture (own)
+          JIRA_INTEGRATION_MAP["GLCP36"]="7584039523685448459"  # Consumption Analytics (own)
+          JIRA_INTEGRATION_MAP["GLCP45"]="7584038436533629469"  # Device Subscription Management (own)
+          # Fallback (option b — shared GLRP integration)
+          JIRA_INTEGRATION_MAP["GLCP1"]="7582498889015567350"   # User & Account Management (shared)
+          JIRA_INTEGRATION_MAP["GLCP2"]="7582498889015567350"   # Commerce (shared)
+          JIRA_INTEGRATION_MAP["GLCP5"]="7582498889015567350"   # Data & Analytics (shared)
+          JIRA_INTEGRATION_MAP["GLCP6"]="7582498889015567350"   # Unified Support Experience (shared)
+          JIRA_INTEGRATION_MAP["GLCP11"]="7582498889015567350"  # High Availability (shared)
+          JIRA_INTEGRATION_MAP["GLCP35"]="7582498889015567350"  # Sustainability (shared)
+          JIRA_INTEGRATION_MAP["GLCP37"]="7582498889015567350"  # Consumption Data Services (shared)
+          # ─────────────────────────────────────────────────────────────────
+
           FAILED=0
 
           while IFS= read -r file; do
@@ -230,8 +256,45 @@ jobs:
 
             if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
               EPIC_REF=$(echo "$BODY" | jq -r '.epic.reference_num // "unknown"')
+              EPIC_ID=$(echo "$BODY" | jq -r '.epic.id // ""')
               EPIC_URL=$(echo "$BODY" | jq -r '.epic.url // ""')
               echo "   Created epic $EPIC_REF → $EPIC_URL"
+
+              # ── Capabilities only: approve + send to Jira ─────────────
+              # Service-intake epics stop here; PMs route them manually.
+              CATEGORY=$(echo "$file" | cut -d'/' -f2)
+              if [ "$CATEGORY" = "capabilities" ]; then
+                # 1) Set status to Approved (gate for the Jira integration)
+                APPROVE_CODE=$(curl -s -o /tmp/approve.json -w "%{http_code}" \
+                  -X PUT \
+                  -H "Authorization: Bearer $AHA_API_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  "https://${AHA_DOMAIN}/api/v1/epics/${EPIC_ID}" \
+                  -d '{"epic":{"workflow_status":{"name":"Approved"}}}')
+                if [ "$APPROVE_CODE" -ge 200 ] && [ "$APPROVE_CODE" -lt 300 ]; then
+                  echo "   Status set to Approved"
+                else
+                  echo "   ⚠️  Failed to set Approved (HTTP $APPROVE_CODE): $(cat /tmp/approve.json)"
+                  FAILED=1
+                fi
+
+                # 2) Send to Jira Cloud GLRP Project
+                INTEGRATION_ID="${JIRA_INTEGRATION_MAP[$WORKSPACE_ID]}"
+                if [ -z "$INTEGRATION_ID" ]; then
+                  echo "   ⚠️  No Jira integration mapped for $WORKSPACE_ID — skipping Jira send."
+                else
+                  SEND_CODE=$(curl -s -o /tmp/send.json -w "%{http_code}" \
+                    -X POST \
+                    -H "Authorization: Bearer $AHA_API_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    "https://${AHA_DOMAIN}/api/v1/epics/${EPIC_ID}/integrations/${INTEGRATION_ID}/integration_fields" \
+                    -d '{"integration_field":{"name":"trigger","value":"send"}}')
+                  echo "   Jira send: HTTP $SEND_CODE (integration $INTEGRATION_ID)"
+                  if [ "$SEND_CODE" -ge 400 ]; then
+                    cat /tmp/send.json
+                  fi
+                fi
+              fi
             else
               echo "   Failed (HTTP $HTTP_CODE): $BODY"
               FAILED=1
