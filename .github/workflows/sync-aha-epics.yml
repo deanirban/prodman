@@ -1,0 +1,139 @@
+name: Sync to Aha Epics
+
+# Triggers when a PR is merged to main that touches any epics/ or prds/ file
+# under the requirements folder hierarchy.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths:
+      - 'requirements/**/epics/*.md'
+      - 'requirements/**/prds/*.md'
+
+jobs:
+  create-aha-epics:
+    # Only run on merged PRs, not just closed ones
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find added/modified requirement files
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only --diff-filter=AM \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            | grep -E '^requirements/.+/(epics|prds)/.+\.md$' || true)
+          echo "Found files:"
+          echo "$CHANGED"
+          {
+            echo "files<<EOF"
+            echo "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Aha Epics
+        if: steps.changed.outputs.files != ''
+        env:
+          AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
+          AHA_DOMAIN: hpepm.aha.io
+        run: |
+          # ── Workspace mapping: folder name → Aha product reference prefix ──
+          declare -A WORKSPACE_MAP
+          # capabilities
+          WORKSPACE_MAP["api-cli-framework"]="GLCP10"
+          WORKSPACE_MAP["commerce"]="GLCP2"
+          WORKSPACE_MAP["compliance-certification"]="GLCP4"
+          WORKSPACE_MAP["consumption-analytics"]="GLCP36"
+          WORKSPACE_MAP["consumption-data-services"]="GLCP37"
+          WORKSPACE_MAP["data-analytics"]="GLCP5"
+          WORKSPACE_MAP["device-subscription-management"]="GLCP45"
+          WORKSPACE_MAP["high-availability"]="GLCP11"
+          WORKSPACE_MAP["on-prem"]="GLCP8"
+          WORKSPACE_MAP["partner-management"]="GLCP7"
+          WORKSPACE_MAP["pi-initiatives"]="GLCP34"
+          WORKSPACE_MAP["platform-architecture"]="GLCP12"
+          WORKSPACE_MAP["security"]="GLCP9"
+          WORKSPACE_MAP["sustainability"]="GLCP35"
+          WORKSPACE_MAP["ui-ux-framework"]="GLCP3"
+          WORKSPACE_MAP["unified-support-experience"]="GLCP6"
+          WORKSPACE_MAP["user-account-management"]="GLCP1"
+          # services-intake
+          WORKSPACE_MAP["hc-pc"]="GLCP17"
+          # Add additional services-intake mappings here as Aha workspaces are confirmed:
+          # WORKSPACE_MAP["aruba"]="GLCPxx"
+          # WORKSPACE_MAP["com-nonstop"]="GLCPxx"
+          # WORKSPACE_MAP["compute-hpc-ai"]="GLCPxx"
+          # WORKSPACE_MAP["flex"]="GLCPxx"
+          # WORKSPACE_MAP["hc-dscc"]="GLCPxx"
+          # WORKSPACE_MAP["hc-saas"]="GLCPxx"
+          # WORKSPACE_MAP["hc-storage"]="GLCPxx"
+          # WORKSPACE_MAP["ideas-portal"]="GLCPxx"
+          # WORKSPACE_MAP["juniper-datacenter"]="GLCPxx"
+          # WORKSPACE_MAP["opsramp"]="GLCPxx"
+          # WORKSPACE_MAP["pointnext"]="GLCPxx"
+
+          FAILED=0
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            echo "──────────────────────────────────────────"
+            echo "Processing: $file"
+
+            # Extract the folder name (3rd path segment):
+            # requirements / (capabilities|services-intake) / <folder> / epics|prds / file.md
+            FOLDER=$(echo "$file" | cut -d'/' -f3)
+            WORKSPACE_ID="${WORKSPACE_MAP[$FOLDER]}"
+
+            if [ -z "$WORKSPACE_ID" ]; then
+              echo "⚠️  No Aha workspace mapping for folder '$FOLDER' — skipping."
+              echo "   Add WORKSPACE_MAP[\"$FOLDER\"]=\"GLCPxx\" to the workflow to enable this folder."
+              continue
+            fi
+
+            # Parse H1 heading as the epic name; fall back to the filename
+            EPIC_NAME=$(grep -m1 '^# ' "$file" | sed 's/^# //' | xargs)
+            if [ -z "$EPIC_NAME" ]; then
+              EPIC_NAME=$(basename "$file" .md)
+            fi
+
+            # Build description from everything after the H1 line (capped at 100 lines)
+            EPIC_DESC=$(awk 'NR>1' "$file" | head -100)
+
+            echo "  Workspace : $WORKSPACE_ID"
+            echo "  Epic name : $EPIC_NAME"
+
+            # Build safe JSON payload with jq
+            PAYLOAD=$(jq -n \
+              --arg name "$EPIC_NAME" \
+              --arg desc "$EPIC_DESC" \
+              '{epic: {name: $name, description: $desc}}')
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST \
+              -H "Authorization: Bearer $AHA_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/epics" \
+              -d "$PAYLOAD")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              EPIC_REF=$(echo "$BODY" | jq -r '.epic.reference_num // "unknown"')
+              EPIC_URL=$(echo "$BODY" | jq -r '.epic.url // ""')
+              echo "  ✅ Created epic $EPIC_REF → $EPIC_URL"
+            else
+              echo "  ❌ Failed (HTTP $HTTP_CODE): $BODY"
+              FAILED=1
+            fi
+
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          exit $FAILED
