@@ -74,9 +74,9 @@ jobs:
         run: |
           echo "── Token present? ──────────────────────────"
           if [ -z "$AHA_API_TOKEN" ]; then
-            echo "❌ AHA_API_TOKEN secret is empty or not set!"
+            echo " AHA_API_TOKEN secret is empty or not set!"
           else
-            echo "✅ AHA_API_TOKEN is set (length: ${#AHA_API_TOKEN})"
+            echo " AHA_API_TOKEN is set (length: ${#AHA_API_TOKEN})"
           fi
 
           echo "── GET /api/v1/me ───────────────────────────"
@@ -179,7 +179,7 @@ jobs:
             WORKSPACE_ID="${WORKSPACE_MAP[$FOLDER]}"
 
             if [ -z "$WORKSPACE_ID" ]; then
-              echo "⚠️  No workspace mapping for folder '$FOLDER' — skipping."
+              echo "  No workspace mapping for folder '$FOLDER' — skipping."
               echo "   Add WORKSPACE_MAP[\"$FOLDER\"]=\"GLCPxx\" to enable this folder."
               continue
             fi
@@ -188,7 +188,7 @@ jobs:
             RELEASE_REF="${WORKSPACE_ID}-R-1"
 
             if [ -z "$RELEASE_ID" ]; then
-              echo "❌ No release ID for $WORKSPACE_ID in RELEASE_ID_MAP — skipping."
+              echo " No release ID for $WORKSPACE_ID in RELEASE_ID_MAP — skipping."
               FAILED=1
               continue
             fi
@@ -214,7 +214,7 @@ jobs:
                 epic: {
                   name: $name,
                   description: $desc,
-                  release: {id: $release_id}
+                  release_id: $release_id
                 }
               }')
 
@@ -231,9 +231,9 @@ jobs:
             if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
               EPIC_REF=$(echo "$BODY" | jq -r '.epic.reference_num // "unknown"')
               EPIC_URL=$(echo "$BODY" | jq -r '.epic.url // ""')
-              echo "  ✅ Created epic $EPIC_REF → $EPIC_URL"
+              echo "   Created epic $EPIC_REF → $EPIC_URL"
             else
-              echo "  ❌ Failed (HTTP $HTTP_CODE): $BODY"
+              echo "   Failed (HTTP $HTTP_CODE): $BODY"
               FAILED=1
             fi
 
