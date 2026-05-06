@@ -161,9 +161,10 @@ jobs:
                 "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages?per_page=200&page=${page}")
 
               MATCH=$(echo "$PAGES_LIST" | jq -r --arg marker "$SOURCE_MARKER" --arg source_url "$REPO_FILE_URL" '
-                (.pages // [])[]?
-                | select(((.description // "") | contains($marker)) or ((.description // "") | contains($source_url)))
-                | @base64' | head -n1)
+                [(.pages // [])[]?] as $items
+                | (($items | map(select((.description // "") | contains($marker))) | first)
+                   // ($items | map(select((.description // "") | contains($source_url))) | first))
+                | if . then @base64 else empty end')
 
               if [ -n "$MATCH" ]; then
                 ITEM=$(echo "$MATCH" | base64 -d)
