@@ -44,6 +44,32 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Diagnose Aha API connectivity
+        env:
+          AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
+          AHA_DOMAIN: hpepm.aha.io
+        run: |
+          echo "── Token present? ──────────────────────────"
+          if [ -z "$AHA_API_TOKEN" ]; then
+            echo "❌ AHA_API_TOKEN secret is empty or not set!"
+          else
+            echo "✅ AHA_API_TOKEN is set (length: ${#AHA_API_TOKEN})"
+          fi
+
+          echo "── GET /api/v1/me ───────────────────────────"
+          curl -s -o /tmp/aha_me.json -w "HTTP %{http_code}\n" \
+            -H "Authorization: Bearer $AHA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${AHA_DOMAIN}/api/v1/me"
+          cat /tmp/aha_me.json | jq '{email: .user.email, name: .user.name}' 2>/dev/null || cat /tmp/aha_me.json
+
+          echo "── GET /api/v1/products (first 5) ──────────"
+          curl -s -o /tmp/aha_products.json -w "HTTP %{http_code}\n" \
+            -H "Authorization: Bearer $AHA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${AHA_DOMAIN}/api/v1/products?per_page=5"
+          cat /tmp/aha_products.json | jq '[.products[]? | {reference_prefix, name, id}]' 2>/dev/null || cat /tmp/aha_products.json
+
       - name: Create Aha Epics in Release GLCP17-R-1
         if: steps.changed.outputs.files != ''
         env:
