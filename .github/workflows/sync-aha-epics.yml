@@ -40,6 +40,10 @@ on:
       - 'requirements/capabilities/unified-support-experience/epics/*.md'
       - 'requirements/capabilities/user-account-management/epics/*.md'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   create-aha-epics:
     # Only run on merged PRs, not just closed ones
@@ -55,9 +59,18 @@ jobs:
       - name: Find added/modified epic files
         id: changed
         run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+          # For squash/rebase merges the PR head commit may not exist on main.
+          # Prefer merge_commit_sha and fall back to head.sha only when needed.
+          if [ -z "$HEAD_SHA" ] || ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          fi
+
           CHANGED=$(git diff --name-only --diff-filter=AM \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA" \
+            "$HEAD_SHA" \
             | grep -E '^requirements/(services-intake/(hc-pc|ideas-portal|aruba|compute-hpc-ai|com-nonstop|flex|hc-dscc|hc-storage|juniper-datacenter|opsramp|pointnext)|capabilities/(api-cli-framework|commerce|compliance-certification|consumption-analytics|consumption-data-services|data-analytics|device-subscription-management|high-availability|on-prem|partner-management|platform-architecture|security|sustainability|ui-ux-framework|unified-support-experience|user-account-management))/epics/.+\.md$' || true)
           echo "Found files:"
           echo "$CHANGED"
@@ -95,6 +108,7 @@ jobs:
 
       - name: Create Aha Epics via workspace map
         if: steps.changed.outputs.files != ''
+        id: create_aha_epics
         env:
           AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
           AHA_DOMAIN: hpepm.aha.io
@@ -166,6 +180,7 @@ jobs:
           # ─────────────────────────────────────────────────────────────────
 
           FAILED=0
+          LINK_LINES=""
 
           while IFS= read -r file; do
             [ -z "$file" ] && continue
@@ -199,8 +214,13 @@ jobs:
               EPIC_NAME=$(basename "$file" .md)
             fi
 
+            REPO_FILE_URL="https://github.com/${{ github.repository }}/blob/main/${file}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            PR_URL="${{ github.event.pull_request.html_url }}"
+
             # Build description from everything after the H1 line (capped at 100 lines)
-            EPIC_DESC=$(awk 'NR>1' "$file" | head -100)
+            EPIC_DESC_RAW=$(awk 'NR>1' "$file" | head -100)
+            EPIC_DESC=$(printf "Source file: %s\nMerged PR: #%s (%s)\n\n%s" "$REPO_FILE_URL" "$PR_NUMBER" "$PR_URL" "$EPIC_DESC_RAW")
 
             echo "  Workspace : $WORKSPACE_ID"
             echo "  Release   : $RELEASE_REF (id: $RELEASE_ID)"
@@ -236,6 +256,7 @@ jobs:
               EPIC_ID=$(echo "$BODY" | jq -r '.epic.id // ""')
               EPIC_URL=$(echo "$BODY" | jq -r '.epic.url // ""')
               echo "   Created epic $EPIC_REF → $EPIC_URL"
+              LINK_LINES+="- ${file} -> ${EPIC_REF} (${EPIC_URL})"$'\n'
 
               # ── Capabilities only: set status to Approved ─────────────
               # Service-intake epics stop here; PMs route them manually.
@@ -265,4 +286,41 @@ jobs:
 
           done <<< "${{ steps.changed.outputs.files }}"
 
+          if [ -z "$LINK_LINES" ]; then
+            LINK_LINES="- No Aha epics were created."
+          fi
+
+          {
+            echo "links<<EOF"
+            echo "$LINK_LINES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
           exit $FAILED
+
+      - name: Comment PR with Epic Links
+        if: steps.changed.outputs.files != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          COMMENT_BODY=$(cat <<'EOF'
+          ## Aha Sync Links (Epics)
+
+          The following Epic files were synced to Aha:
+
+          __LINKS__
+          EOF
+          )
+
+          COMMENT_BODY="${COMMENT_BODY/__LINKS__/${{ steps.create_aha_epics.outputs.links }}}"
+
+          jq -n --arg body "$COMMENT_BODY" '{body:$body}' > /tmp/epic_comment.json
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d @/tmp/epic_comment.json >/dev/null

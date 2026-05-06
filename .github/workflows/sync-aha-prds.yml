@@ -35,6 +35,10 @@ on:
       - 'requirements/capabilities/unified-support-experience/prds/*.md'
       - 'requirements/capabilities/user-account-management/prds/*.md'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   create-aha-prd-notes:
     if: github.event.pull_request.merged == true
@@ -72,6 +76,7 @@ jobs:
 
       - name: Create Aha PRD Notes
         if: steps.changed.outputs.files != ''
+        id: create_aha_prds
         env:
           AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
           AHA_DOMAIN: hpepm.aha.io
@@ -111,6 +116,7 @@ jobs:
           WORKSPACE_MAP["user-account-management"]="GLCP1"
 
           FAILED=0
+          LINK_LINES=""
 
           while IFS= read -r file; do
             [ -z "$file" ] && continue
@@ -156,6 +162,7 @@ jobs:
               REF=$(echo "$BODY" | jq -r '.page.reference_num // "unknown"')
               URL=$(echo "$BODY" | jq -r '.page.url // ""')
               echo "Created PRD note ${REF} -> ${URL}"
+              LINK_LINES+="- ${file} -> ${REF} (${URL})"$'\n'
             else
               echo "Failed to create note for $file (HTTP $HTTP_CODE): $BODY"
               FAILED=1
@@ -163,4 +170,41 @@ jobs:
 
           done <<< "${{ steps.changed.outputs.files }}"
 
+          if [ -z "$LINK_LINES" ]; then
+            LINK_LINES="- No Aha PRD notes were created."
+          fi
+
+          {
+            echo "links<<EOF"
+            echo "$LINK_LINES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
           exit $FAILED
+
+      - name: Comment PR with PRD Links
+        if: steps.changed.outputs.files != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          COMMENT_BODY=$(cat <<'EOF'
+          ## Aha Sync Links (PRDs)
+
+          The following PRD files were synced to Aha:
+
+          __LINKS__
+          EOF
+          )
+
+          COMMENT_BODY="${COMMENT_BODY/__LINKS__/${{ steps.create_aha_prds.outputs.links }}}"
+
+          jq -n --arg body "$COMMENT_BODY" '{body:$body}' > /tmp/prd_comment.json
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d @/tmp/prd_comment.json >/dev/null
