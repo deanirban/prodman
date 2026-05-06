@@ -110,33 +110,6 @@ jobs:
           WORKSPACE_MAP["unified-support-experience"]="GLCP6"
           WORKSPACE_MAP["user-account-management"]="GLCP1"
 
-          # Optional overrides for parent PRD pages by workspace.
-          # Fallback order if not found:
-          # 1) override value
-          # 2) <workspace>-N-4
-          # 3) <workspace>-N-3
-          declare -A PRD_PARENT_PAGE_REF_OVERRIDE
-          PRD_PARENT_PAGE_REF_OVERRIDE["GLCP17"]="GLCP17-N-4"
-
-          find_page_id() {
-            local page_ref="$1"
-            local response
-            response=$(curl -s -w "\n%{http_code}" \
-              -H "Authorization: Bearer $AHA_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://${AHA_DOMAIN}/api/v1/pages/${page_ref}")
-            local code
-            code=$(echo "$response" | tail -n1)
-            local body
-            body=$(echo "$response" | head -n -1)
-
-            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
-              echo "$body" | jq -r '.page.id // ""'
-            else
-              echo ""
-            fi
-          }
-
           FAILED=0
 
           while IFS= read -r file; do
@@ -165,25 +138,9 @@ jobs:
             FILE_BODY=$(cat "$file")
             NOTE_BODY=$(printf "Source file: %s\nMerged PR: #%s (%s)\n\n%s" "$REPO_FILE_URL" "$PR_NUMBER" "$PR_URL" "$FILE_BODY")
 
-            PARENT_REF_OVERRIDE="${PRD_PARENT_PAGE_REF_OVERRIDE[$WORKSPACE_ID]:-}"
-            CANDIDATE_ONE="${PARENT_REF_OVERRIDE:-${WORKSPACE_ID}-N-4}"
-            CANDIDATE_TWO="${WORKSPACE_ID}-N-3"
-
-            PARENT_ID=""
-            PARENT_ID=$(find_page_id "$CANDIDATE_ONE")
-            if [ -z "$PARENT_ID" ] && [ "$CANDIDATE_TWO" != "$CANDIDATE_ONE" ]; then
-              PARENT_ID=$(find_page_id "$CANDIDATE_TWO")
-            fi
-
-            if [ -z "$PARENT_ID" ]; then
-              echo "Warning: No parent page found for $WORKSPACE_ID using ${CANDIDATE_ONE} or ${CANDIDATE_TWO}; creating top-level note"
-              PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg body "$NOTE_BODY" \
-                '{page:{name:$name, description:{body:$body}}}')
-            else
-              echo "Parent page resolved for $WORKSPACE_ID: $PARENT_ID"
-              PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg body "$NOTE_BODY" --arg parent_id "$PARENT_ID" \
-                '{page:{name:$name, description:{body:$body}, parent_id:$parent_id}}')
-            fi
+            # Create PRD notes at workspace root by design.
+            PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg body "$NOTE_BODY" \
+              '{page:{name:$name, description:{body:$body}}}')
 
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST \
