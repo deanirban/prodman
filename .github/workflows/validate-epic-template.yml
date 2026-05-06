@@ -1,0 +1,78 @@
+name: Validate Epic Template
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'requirements/capabilities/**/epics/*.md'
+      - 'requirements/services-intake/**/epics/*.md'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find added/modified epic files
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only --diff-filter=AM \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            | grep -E '^requirements/(capabilities|services-intake)/[^/]+/epics/.+\.md$' || true)
+          echo "Files to validate:"
+          echo "$CHANGED"
+          {
+            echo "files<<EOF"
+            echo "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate mandatory sections
+        if: steps.changed.outputs.files != ''
+        run: |
+          REQUIRED=(
+            "**Problem Statement:**"
+            "**Goal:**"
+            "**Functional Requirements:**"
+            "**Acceptance Criteria:**"
+          )
+
+          FAILED=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "──────────────────────────────────────────"
+            echo "Checking: $file"
+
+            MISSING=()
+            for section in "${REQUIRED[@]}"; do
+              if ! grep -qF "$section" "$file"; then
+                MISSING+=("$section")
+              fi
+            done
+
+            # Also require the H1 epic title (line starting with single '# ')
+            if ! grep -qE '^# .+' "$file"; then
+              MISSING+=("# <Epic title>")
+            fi
+
+            if [ ${#MISSING[@]} -gt 0 ]; then
+              echo "  ❌ Missing required sections:"
+              for s in "${MISSING[@]}"; do
+                echo "     - $s"
+              done
+              FAILED=1
+            else
+              echo "  ✅ All required sections present"
+            fi
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "Epic files must include all mandatory sections."
+            echo "See .github/EPIC_TEMPLATE.md for the canonical template."
+            exit 1
+          fi
