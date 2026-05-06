@@ -1,43 +1,50 @@
 # HC-PC Guided Capacity Optimization
 
-## Problem Statement
+**Problem Statement:**
 
 HC-PC platform operators lack a consistent, proactive way to detect under-provisioned or over-provisioned private cloud clusters before user-visible impact or unnecessary spend occurs.
 
-## Context
+**Context **(optional)**:**
 
-Current capacity insights are fragmented across dashboards and manual exports. Operations teams rely on periodic reviews and reactive ticketing, which increases MTTR and creates avoidable resource waste.
+- Business objective: Reduce reactive capacity incidents and improve infrastructure efficiency in HC-PC deployments.
+- Previous work done: Existing health and telemetry dashboards provide fragmented indicators without guided remediation.
+- PRD link: requirements/services-intake/hc-pc/prds/hc-pc-guided-capacity-optimization-prd-2026-05-06.md
 
-## Goal
+**Goal:**
 
-Provide a guided capacity optimization flow that identifies risk early, recommends right-sizing actions, and helps operators execute remediation safely.
+As a HC-PC platform operator, I want proactive, explainable capacity recommendations and guided remediation workflows, so that I can prevent performance risk and reduce overprovisioning.
 
-## Workflows
+- Targeted User Persona: Platform operator, operations manager, SRE lead.
+- Benefit, Value to customer: Faster risk identification, lower operational cost, higher service reliability.
 
-1. Operator opens HC-PC operations dashboard and reviews capacity risk scorecards.
-2. Operator drills into a cluster and sees optimization recommendations with confidence level.
-3. Operator selects remediation options and generates an execution plan.
-4. Operator applies changes with guardrails and can roll back if post-change health degrades.
+**Workflows (User and System Interactions):**
 
-## Functional Requirements
+- Operator reviews cluster risk scorecards in HC-PC operations dashboard.
+- Operator opens a recommendation, validates rationale, and runs what-if simulation.
+- Operator submits remediation for approval when required by policy.
+- System executes approved remediation and records post-change outcomes.
+- Operator reviews outcome summary and closes the optimization cycle.
 
-1. Aggregate utilization, growth trend, and headroom signals into a cluster-level risk score.
-2. Show recommendation rationale, expected impact, and confidence per recommendation.
-3. Support what-if simulation for CPU, memory, and storage rebalancing scenarios.
-4. Enforce RBAC controls and approval checks before applying high-impact changes.
-5. Emit audit records and outcome telemetry for each accepted or dismissed recommendation.
+**Functional Requirements:**
 
-## Acceptance Criteria
+- Compute cluster-level capacity risk scores from utilization, growth trend, and headroom data.
+- Display recommendation rationale, expected impact, and confidence score.
+- Provide simulation capabilities for CPU, memory, and storage balancing options.
+- Enforce RBAC and approval policies for high-impact remediation actions.
+- Capture audit events and telemetry for accepted, rejected, and completed recommendations.
 
-- Operators can identify top capacity risks for all managed clusters in one view.
-- For each recommendation, the UI displays rationale, impact estimate, and confidence.
-- Simulation results are available before any change is applied.
-- High-impact remediations require explicit approval and are fully auditable.
-- Post-remediation outcomes are captured and visible in reporting.
+**Acceptance Criteria:**
 
-## Dependencies
+- Positive functional scenarios: Operators can identify top risks and apply approved remediations.
+- Negative functional scenarios: Unauthorized users cannot execute restricted actions.
+- Out of Scope functional scenarios: Automated remediation without operator approval in this release.
+- Monitoring/Observability: Recommendation latency, acceptance rate, and remediation success metrics are published.
+- Security Audit Complete: No open critical findings for the feature scope.
+- ATA status: No Critical/High gaps; mitigation plan documented for Medium/Low items.
+- Pen Test Criteria: No CAT1 findings; CAT2/CAT3 mitigation documented.
+- Compliance Audit complete: Audit logging and retention requirements are met.
 
-- HC-PC telemetry ingestion pipeline and data quality baselines.
-- IAM and RBAC services for authorization and approvals.
-- Notification and case-management integrations for escalations.
-- Change execution APIs and rollback orchestration hooks.
+**Dependencies:**
+
+- Internal within GLP services: HC-PC telemetry pipeline, IAM/RBAC, policy engine, audit service.
+- External on BUs: Orchestration engines and support automation integration owned by HC-PC BU teams.
