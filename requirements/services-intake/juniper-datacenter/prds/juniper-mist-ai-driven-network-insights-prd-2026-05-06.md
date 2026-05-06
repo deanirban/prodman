@@ -1,5 +1,6 @@
 # Service Initiative: AI-Driven Network Insights for Juniper Mist on GreenLake
 
+**Authored by**: Pallavi  
 **Product Manager**: HPE GreenLake Network Team  
 **BU Product Manager**: Juniper Networks, Network & Security Services  
 **Document Status**: Draft  
