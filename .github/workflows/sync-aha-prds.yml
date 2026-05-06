@@ -49,9 +49,18 @@ jobs:
       - name: Find added/modified PRD files
         id: changed
         run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+          # For squash/rebase merges the PR head commit may not exist on main.
+          # Prefer merge_commit_sha and fall back to head.sha only when needed.
+          if [ -z "$HEAD_SHA" ] || ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          fi
+
           CHANGED=$(git diff --name-only --diff-filter=AM \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA" \
+            "$HEAD_SHA" \
             | grep -E '^requirements/(services-intake/(hc-pc|ideas-portal|aruba|compute-hpc-ai|com-nonstop|flex|hc-dscc|hc-storage|juniper-datacenter|opsramp|pointnext)|capabilities/(api-cli-framework|commerce|compliance-certification|consumption-analytics|consumption-data-services|data-analytics|device-subscription-management|high-availability|on-prem|partner-management|platform-architecture|security|sustainability|ui-ux-framework|unified-support-experience|user-account-management))/prds/.+\.md$' || true)
           echo "Found files:"
           echo "$CHANGED"
