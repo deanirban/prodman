@@ -305,7 +305,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          MARKER="<!-- aha-sync-links:epics -->"
+          COMMENTS_API="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+
           COMMENT_BODY=$(cat <<'EOF'
+          <!-- aha-sync-links:epics -->
           ## Aha Sync Links (Epics)
 
           The following Epic files were synced to Aha:
@@ -316,11 +320,28 @@ jobs:
 
           COMMENT_BODY="${COMMENT_BODY/__LINKS__/${{ steps.create_aha_epics.outputs.links }}}"
 
-          jq -n --arg body "$COMMENT_BODY" '{body:$body}' > /tmp/epic_comment.json
-
-          curl -s -X POST \
+          EXISTING_ID=$(curl -s \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            -d @/tmp/epic_comment.json >/dev/null
+            "$COMMENTS_API?per_page=100" \
+            | jq -r --arg marker "$MARKER" 'map(select(.body | contains($marker))) | last.id // empty')
+
+          jq -n --arg body "$COMMENT_BODY" '{body:$body}' > /tmp/epic_comment.json
+
+          if [ -n "$EXISTING_ID" ]; then
+            curl -s -X PATCH \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/comments/${EXISTING_ID}" \
+              -d @/tmp/epic_comment.json >/dev/null
+            echo "Updated existing epic links comment: ${EXISTING_ID}"
+          else
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "$COMMENTS_API" \
+              -d @/tmp/epic_comment.json >/dev/null
+            echo "Created new epic links comment"
+          fi
