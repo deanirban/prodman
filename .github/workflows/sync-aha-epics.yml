@@ -133,9 +133,23 @@ jobs:
               continue
             fi
 
-            # Derive release reference as ${WORKSPACE_ID}-R-1
-            # e.g. hc-pc → GLCP17 → GLCP17-R-1 (Parking lot)
-            RELEASE_ID="${WORKSPACE_ID}-R-1"
+            # Derive release reference as ${WORKSPACE_ID}-R-1 (Parking lot)
+            # then resolve it to an internal ID via the Aha releases API,
+            # because the epic create endpoint ignores reference_num and
+            # defaults to the active release unless an internal ID is supplied.
+            RELEASE_REF="${WORKSPACE_ID}-R-1"
+            RELEASE_ID=$(curl -s \
+              -H "Authorization: Bearer $AHA_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/releases?per_page=50" \
+              | jq -r --arg ref "$RELEASE_REF" \
+                '.releases[] | select(.reference_num == $ref) | .id')
+
+            if [ -z "$RELEASE_ID" ]; then
+              echo "❌ Could not resolve release ID for $RELEASE_REF in $WORKSPACE_ID — skipping."
+              FAILED=1
+              continue
+            fi
 
             # Parse H1 heading as the epic name; fall back to the filename
             EPIC_NAME=$(grep -m1 '^# ' "$file" | sed 's/^# //' | xargs)
@@ -147,18 +161,18 @@ jobs:
             EPIC_DESC=$(awk 'NR>1' "$file" | head -100)
 
             echo "  Workspace : $WORKSPACE_ID"
-            echo "  Release   : $RELEASE_ID"
+            echo "  Release   : $RELEASE_REF (id: $RELEASE_ID)"
             echo "  Epic name : $EPIC_NAME"
 
             PAYLOAD=$(jq -n \
               --arg name "$EPIC_NAME" \
               --arg desc "$EPIC_DESC" \
-              --arg release "$RELEASE_ID" \
+              --arg release_id "$RELEASE_ID" \
               '{
                 epic: {
                   name: $name,
                   description: $desc,
-                  release: {reference_num: $release}
+                  release: {id: $release_id}
                 }
               }')
 
