@@ -117,18 +117,37 @@ jobs:
             # Build description from everything after the H1 line (capped at 100 lines)
             EPIC_DESC=$(awk 'NR>1' "$file" | head -100)
 
+            TODAY=$(date -u +%Y-%m-%d)
+
             echo "  Release   : $AHA_RELEASE_ID"
             echo "  Epic name : $EPIC_NAME"
+            echo "  Req. date : $TODAY"
 
-            # Build safe JSON payload with jq
+            # Build safe JSON payload with jq.
             # Epic is created under the GLCP17 product and pinned to release GLCP17-R-1.
-            # Aha! does not expose a /releases/{id}/epics POST endpoint; epics must be
-            # created at the product level with a release_id field to assign them.
+            # Mandatory fields:
+            #   name             - H1 of the markdown file
+            #   description      - body of the markdown file
+            #   release          - assigns the epic to GLCP17-R-1
+            #   custom_fields:
+            #     requested_by   - Single Select, set to null (None)
+            #     requested_date - today's date (ISO 8601)
             PAYLOAD=$(jq -n \
               --arg name "$EPIC_NAME" \
               --arg desc "$EPIC_DESC" \
               --arg release "$AHA_RELEASE_ID" \
-              '{epic: {name: $name, description: $desc, release: {reference_num: $release}}}')
+              --arg date "$TODAY" \
+              '{
+                epic: {
+                  name: $name,
+                  description: $desc,
+                  release: {reference_num: $release},
+                  custom_fields: {
+                    requested_by: null,
+                    requested_date: $date
+                  }
+                }
+              }')
 
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST \
