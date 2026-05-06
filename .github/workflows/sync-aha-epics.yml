@@ -10,10 +10,35 @@ on:
     types: [closed]
     branches: [main]
     paths:
+      # services-intake
       - 'requirements/services-intake/hc-pc/epics/*.md'
-      # After testing, re-enable broader paths:
-      # - 'requirements/**/epics/*.md'
-      # - 'requirements/**/prds/*.md'
+      - 'requirements/services-intake/ideas-portal/epics/*.md'
+      - 'requirements/services-intake/aruba/epics/*.md'
+      - 'requirements/services-intake/compute-hpc-ai/epics/*.md'
+      - 'requirements/services-intake/com-nonstop/epics/*.md'
+      - 'requirements/services-intake/flex/epics/*.md'
+      - 'requirements/services-intake/hc-dscc/epics/*.md'
+      - 'requirements/services-intake/hc-storage/epics/*.md'
+      - 'requirements/services-intake/juniper-datacenter/epics/*.md'
+      - 'requirements/services-intake/opsramp/epics/*.md'
+      - 'requirements/services-intake/pointnext/epics/*.md'
+      # capabilities
+      - 'requirements/capabilities/api-cli-framework/epics/*.md'
+      - 'requirements/capabilities/commerce/epics/*.md'
+      - 'requirements/capabilities/compliance-certification/epics/*.md'
+      - 'requirements/capabilities/consumption-analytics/epics/*.md'
+      - 'requirements/capabilities/consumption-data-services/epics/*.md'
+      - 'requirements/capabilities/data-analytics/epics/*.md'
+      - 'requirements/capabilities/device-subscription-management/epics/*.md'
+      - 'requirements/capabilities/high-availability/epics/*.md'
+      - 'requirements/capabilities/on-prem/epics/*.md'
+      - 'requirements/capabilities/partner-management/epics/*.md'
+      - 'requirements/capabilities/platform-architecture/epics/*.md'
+      - 'requirements/capabilities/security/epics/*.md'
+      - 'requirements/capabilities/sustainability/epics/*.md'
+      - 'requirements/capabilities/ui-ux-framework/epics/*.md'
+      - 'requirements/capabilities/unified-support-experience/epics/*.md'
+      - 'requirements/capabilities/user-account-management/epics/*.md'
 
 jobs:
   create-aha-epics:
@@ -33,9 +58,7 @@ jobs:
           CHANGED=$(git diff --name-only --diff-filter=AM \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}" \
-            | grep -E '^requirements/services-intake/hc-pc/epics/.+\.md$' || true)
-          # After testing, broaden the grep to:
-          # | grep -E '^requirements/.+/(epics|prds)/.+\.md$' || true)
+            | grep -E '^requirements/(services-intake/(hc-pc|ideas-portal|aruba|compute-hpc-ai|com-nonstop|flex|hc-dscc|hc-storage|juniper-datacenter|opsramp|pointnext)|capabilities/(api-cli-framework|commerce|compliance-certification|consumption-analytics|consumption-data-services|data-analytics|device-subscription-management|high-availability|on-prem|partner-management|platform-architecture|security|sustainability|ui-ux-framework|unified-support-experience|user-account-management))/epics/.+\.md$' || true)
           echo "Found files:"
           echo "$CHANGED"
           {
@@ -76,42 +99,70 @@ jobs:
           AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
           AHA_DOMAIN: hpepm.aha.io
         run: |
-          # ── Folder → Aha product prefix map ──────────────────────────────
-          # Release is derived automatically as ${PREFIX}-R-1
-          # (matching the "Parking lot" release in each workspace).
-          # services-intake — active
+          # ── Folder → Aha product prefix ──────────────────────────────────
+          # services-intake
           declare -A WORKSPACE_MAP
-          WORKSPACE_MAP["hc-pc"]="GLCP17"
-          # Uncomment below as additional workspace IDs are confirmed:
-          # WORKSPACE_MAP["aruba"]="GLCPxx"
-          # WORKSPACE_MAP["com-nonstop"]="GLCPxx"
-          # WORKSPACE_MAP["compute-hpc-ai"]="GLCPxx"
-          # WORKSPACE_MAP["flex"]="GLCPxx"
-          # WORKSPACE_MAP["hc-dscc"]="GLCPxx"
-          # WORKSPACE_MAP["hc-saas"]="GLCPxx"
-          # WORKSPACE_MAP["hc-storage"]="GLCPxx"
-          # WORKSPACE_MAP["ideas-portal"]="GLCPxx"
-          # WORKSPACE_MAP["juniper-datacenter"]="GLCPxx"
-          # WORKSPACE_MAP["opsramp"]="GLCPxx"
-          # WORKSPACE_MAP["pointnext"]="GLCPxx"
+          WORKSPACE_MAP["hc-pc"]="GLCP17"            # HPE GreenLake for Private Cloud
+          WORKSPACE_MAP["ideas-portal"]="GLCP13"     # Ideas Portal
+          WORKSPACE_MAP["aruba"]="GLCP16"            # Aruba
+          WORKSPACE_MAP["compute-hpc-ai"]="GLCP19"   # Compute / HPC / AI
+          WORKSPACE_MAP["com-nonstop"]="GLCP50"      # NonStop
+          WORKSPACE_MAP["flex"]="GLCP49"             # HPE Flex
+          WORKSPACE_MAP["hc-dscc"]="GLCP47"          # Data Services Cloud Console
+          WORKSPACE_MAP["hc-storage"]="GLCP18"       # HPE GreenLake for Storage
+          WORKSPACE_MAP["juniper-datacenter"]="GLCP51" # Juniper Datacenter
+          WORKSPACE_MAP["opsramp"]="GLCP32"          # OpsRamp
+          WORKSPACE_MAP["pointnext"]="GLCP20"        # Pointnext
           # capabilities
-          # WORKSPACE_MAP["api-cli-framework"]="GLCP10"
-          # WORKSPACE_MAP["commerce"]="GLCP2"
-          # WORKSPACE_MAP["compliance-certification"]="GLCP4"
-          # WORKSPACE_MAP["consumption-analytics"]="GLCP36"
-          # WORKSPACE_MAP["consumption-data-services"]="GLCP37"
-          # WORKSPACE_MAP["data-analytics"]="GLCP5"
-          # WORKSPACE_MAP["device-subscription-management"]="GLCP45"
-          # WORKSPACE_MAP["high-availability"]="GLCP11"
-          # WORKSPACE_MAP["on-prem"]="GLCP8"
-          # WORKSPACE_MAP["partner-management"]="GLCP7"
-          # WORKSPACE_MAP["pi-initiatives"]="GLCP34"
-          # WORKSPACE_MAP["platform-architecture"]="GLCP12"
-          # WORKSPACE_MAP["security"]="GLCP9"
-          # WORKSPACE_MAP["sustainability"]="GLCP35"
-          # WORKSPACE_MAP["ui-ux-framework"]="GLCP3"
-          # WORKSPACE_MAP["unified-support-experience"]="GLCP6"
-          # WORKSPACE_MAP["user-account-management"]="GLCP1"
+          WORKSPACE_MAP["api-cli-framework"]="GLCP10"           # API / CLI Framework
+          WORKSPACE_MAP["commerce"]="GLCP2"                     # Commerce
+          WORKSPACE_MAP["compliance-certification"]="GLCP4"     # Compliance & Certification
+          WORKSPACE_MAP["consumption-analytics"]="GLCP36"       # Consumption Analytics
+          WORKSPACE_MAP["consumption-data-services"]="GLCP37"   # Consumption Data Services
+          WORKSPACE_MAP["data-analytics"]="GLCP5"               # Data & Analytics
+          WORKSPACE_MAP["device-subscription-management"]="GLCP45" # Device Subscription Management
+          WORKSPACE_MAP["high-availability"]="GLCP11"           # High Availability
+          WORKSPACE_MAP["on-prem"]="GLCP8"                      # On-Prem
+          WORKSPACE_MAP["partner-management"]="GLCP7"           # Partner Management
+          WORKSPACE_MAP["platform-architecture"]="GLCP12"       # Platform Architecture
+          WORKSPACE_MAP["security"]="GLCP9"                     # Security
+          WORKSPACE_MAP["sustainability"]="GLCP35"              # Sustainability
+          WORKSPACE_MAP["ui-ux-framework"]="GLCP3"              # UI / UX Framework
+          WORKSPACE_MAP["unified-support-experience"]="GLCP6"   # Unified Support Experience
+          WORKSPACE_MAP["user-account-management"]="GLCP1"      # User & Account Management
+
+          # ── Product prefix → Parking lot release internal ID ─────────────
+          # Pre-fetched via GET /api/v1/products/{prefix}/releases
+          # Note: juniper-datacenter uses R-2 (GLCP51-R-2), not R-1.
+          declare -A RELEASE_ID_MAP
+          RELEASE_ID_MAP["GLCP17"]="7128294929516075414"  # GLCP17-R-1 Parking lot  | HPE GreenLake for Private Cloud
+          RELEASE_ID_MAP["GLCP13"]="7128294620924146608"  # GLCP13-R-1 Parking lot  | Ideas Portal
+          RELEASE_ID_MAP["GLCP16"]="7128294859224684943"  # GLCP16-R-1 Parking lot  | Aruba
+          RELEASE_ID_MAP["GLCP19"]="7128295090384476396"  # GLCP19-R-1 Parking lot  | Compute / HPC / AI
+          RELEASE_ID_MAP["GLCP50"]="7610829864526230575"  # GLCP50-R-1 Parking lot  | NonStop
+          RELEASE_ID_MAP["GLCP49"]="7610829709079121187"  # GLCP49-R-1 Parking lot  | HPE Flex
+          RELEASE_ID_MAP["GLCP47"]="7353168634253183132"  # GLCP47-R-1 Parking lot  | Data Services Cloud Console
+          RELEASE_ID_MAP["GLCP18"]="7128295035706620403"  # GLCP18-R-1 Parking lot  | HPE GreenLake for Storage
+          RELEASE_ID_MAP["GLCP51"]="7614167401223301351"  # GLCP51-R-2 Parking lot  | Juniper Datacenter
+          RELEASE_ID_MAP["GLCP32"]="7128296802538292352"  # GLCP32-R-1 Parking lot  | OpsRamp
+          RELEASE_ID_MAP["GLCP20"]="7128295882547093549"  # GLCP20-R-1 Parking lot  | Pointnext
+          # capabilities
+          RELEASE_ID_MAP["GLCP1"]="7150872229332356984"    # GLCP1-R-1  Parking lot  | User & Account Management
+          RELEASE_ID_MAP["GLCP2"]="7128293701299502134"    # GLCP2-R-1  Parking lot  | Commerce
+          RELEASE_ID_MAP["GLCP3"]="7128293761680554161"    # GLCP3-R-1  Parking lot  | UI / UX Framework
+          RELEASE_ID_MAP["GLCP4"]="7128293823183432847"    # GLCP4-R-1  Parking lot  | Compliance & Certification
+          RELEASE_ID_MAP["GLCP5"]="7128293885951377665"    # GLCP5-R-1  Parking lot  | Data & Analytics
+          RELEASE_ID_MAP["GLCP6"]="7128293987621272937"    # GLCP6-R-1  Parking lot  | Unified Support Experience
+          RELEASE_ID_MAP["GLCP7"]="7128294080129928601"    # GLCP7-R-1  Parking lot  | Partner Management
+          RELEASE_ID_MAP["GLCP8"]="7128294176896902250"    # GLCP8-R-1  Parking lot  | On-Prem
+          RELEASE_ID_MAP["GLCP9"]="7128294327839961911"    # GLCP9-R-1  Parking lot  | Security
+          RELEASE_ID_MAP["GLCP10"]="7128294396392024897"   # GLCP10-R-1 Parking lot  | API / CLI Framework
+          RELEASE_ID_MAP["GLCP11"]="7128294485639007067"   # GLCP11-R-1 Parking lot  | High Availability
+          RELEASE_ID_MAP["GLCP12"]="7128294548305709587"   # GLCP12-R-1 Parking lot  | Platform Architecture
+          RELEASE_ID_MAP["GLCP35"]="7129738553705712644"   # GLCP35-R-1 Parking lot  | Sustainability
+          RELEASE_ID_MAP["GLCP36"]="7129738625802355025"   # GLCP36-R-1 Parking lot  | Consumption Analytics
+          RELEASE_ID_MAP["GLCP37"]="7129738701409316920"   # GLCP37-R-1 Parking lot  | Consumption Data Services
+          RELEASE_ID_MAP["GLCP45"]="7129836891028171763"   # GLCP45-R-1 Parking lot  | Device Subscription Management
           # ─────────────────────────────────────────────────────────────────
 
           FAILED=0
@@ -133,20 +184,11 @@ jobs:
               continue
             fi
 
-            # Derive release reference as ${WORKSPACE_ID}-R-1 (Parking lot)
-            # then resolve it to an internal ID via the Aha releases API,
-            # because the epic create endpoint ignores reference_num and
-            # defaults to the active release unless an internal ID is supplied.
+            RELEASE_ID="${RELEASE_ID_MAP[$WORKSPACE_ID]}"
             RELEASE_REF="${WORKSPACE_ID}-R-1"
-            RELEASE_ID=$(curl -s \
-              -H "Authorization: Bearer $AHA_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/releases?per_page=50" \
-              | jq -r --arg ref "$RELEASE_REF" \
-                '.releases[] | select(.reference_num == $ref) | .id')
 
             if [ -z "$RELEASE_ID" ]; then
-              echo "❌ Could not resolve release ID for $RELEASE_REF in $WORKSPACE_ID — skipping."
+              echo "❌ No release ID for $WORKSPACE_ID in RELEASE_ID_MAP — skipping."
               FAILED=1
               continue
             fi
