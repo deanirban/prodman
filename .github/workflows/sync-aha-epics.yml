@@ -304,26 +304,18 @@ jobs:
               echo "   ${ACTION} epic $EPIC_REF -> $EPIC_URL"
               LINK_LINES+="- ${file} -> ${EPIC_REF} (${EPIC_URL})"$'\n'
 
-              # ── Capabilities only: set status to Approved ─────────────
-              # Service-intake epics stop here; PMs route them manually.
-              # Aha must have an automation rule per capabilities workspace:
-              #   "When epic status changes to Approved → Send to Jira Cloud
-              #    GLRP Project". Aha's public REST API does not expose the
-              #   Send-to-Jira trigger directly.
-              CATEGORY=$(echo "$file" | cut -d'/' -f2)
-              if [ "$CATEGORY" = "capabilities" ]; then
-                APPROVE_CODE=$(curl -s -o /tmp/approve.json -w "%{http_code}" \
-                  -X PUT \
-                  -H "Authorization: Bearer $AHA_API_TOKEN" \
-                  -H "Content-Type: application/json" \
-                  "https://${AHA_DOMAIN}/api/v1/epics/${EPIC_ID}" \
-                  -d '{"epic":{"workflow_status":{"name":"Approved"}}}')
-                if [ "$APPROVE_CODE" -ge 200 ] && [ "$APPROVE_CODE" -lt 300 ]; then
-                  echo "   Status set to Approved (Aha automation should send to Jira)"
-                else
-                  echo "     Failed to set Approved (HTTP $APPROVE_CODE): $(cat /tmp/approve.json)"
-                  FAILED=1
-                fi
+              # Move synced epics out of Created state for both services and capabilities.
+              APPROVE_CODE=$(curl -s -o /tmp/approve.json -w "%{http_code}" \
+                -X PUT \
+                -H "Authorization: Bearer $AHA_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://${AHA_DOMAIN}/api/v1/epics/${EPIC_ID}" \
+                -d '{"epic":{"workflow_status":{"name":"Approved"}}}')
+              if [ "$APPROVE_CODE" -ge 200 ] && [ "$APPROVE_CODE" -lt 300 ]; then
+                echo "   Status set to Approved"
+              else
+                echo "     Failed to set Approved (HTTP $APPROVE_CODE): $(cat /tmp/approve.json)"
+                FAILED=1
               fi
             else
               echo "   Failed (HTTP $HTTP_CODE): $BODY"
