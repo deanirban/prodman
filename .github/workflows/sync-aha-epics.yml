@@ -1,14 +1,19 @@
 name: Sync to Aha Epics
 
-# Triggers when a PR is merged to main that touches any epics/ or prds/ file
-# under the requirements folder hierarchy.
+# ── TESTING PHASE ────────────────────────────────────────────────────────────
+# Currently scoped to hc-pc/epics only, posting into release GLCP17-R-1.
+# After testing, un-comment additional paths and the full WORKSPACE_MAP below,
+# and switch the endpoint back to the product-level URL.
+# ─────────────────────────────────────────────────────────────────────────────
 on:
   pull_request:
     types: [closed]
     branches: [main]
     paths:
-      - 'requirements/**/epics/*.md'
-      - 'requirements/**/prds/*.md'
+      - 'requirements/services-intake/hc-pc/epics/*.md'
+      # After testing, re-enable broader paths:
+      # - 'requirements/**/epics/*.md'
+      # - 'requirements/**/prds/*.md'
 
 jobs:
   create-aha-epics:
@@ -22,13 +27,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Find added/modified requirement files
+      - name: Find added/modified epic files
         id: changed
         run: |
           CHANGED=$(git diff --name-only --diff-filter=AM \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}" \
-            | grep -E '^requirements/.+/(epics|prds)/.+\.md$' || true)
+            | grep -E '^requirements/services-intake/hc-pc/epics/.+\.md$' || true)
+          # After testing, broaden the grep to:
+          # | grep -E '^requirements/.+/(epics|prds)/.+\.md$' || true)
           echo "Found files:"
           echo "$CHANGED"
           {
@@ -37,46 +44,61 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create Aha Epics
+      - name: Create Aha Epics in Release GLCP17-R-1
         if: steps.changed.outputs.files != ''
         env:
           AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
           AHA_DOMAIN: hpepm.aha.io
+          # ── TEST TARGET ───────────────────────────────────────────────────
+          # Epics are created directly inside this release.
+          # Remove / replace this variable when switching to product-level posting.
+          AHA_RELEASE_ID: GLCP17-R-1
+          # ─────────────────────────────────────────────────────────────────
         run: |
-          # ── Workspace mapping: folder name → Aha product reference prefix ──
-          declare -A WORKSPACE_MAP
-          # capabilities
-          WORKSPACE_MAP["api-cli-framework"]="GLCP10"
-          WORKSPACE_MAP["commerce"]="GLCP2"
-          WORKSPACE_MAP["compliance-certification"]="GLCP4"
-          WORKSPACE_MAP["consumption-analytics"]="GLCP36"
-          WORKSPACE_MAP["consumption-data-services"]="GLCP37"
-          WORKSPACE_MAP["data-analytics"]="GLCP5"
-          WORKSPACE_MAP["device-subscription-management"]="GLCP45"
-          WORKSPACE_MAP["high-availability"]="GLCP11"
-          WORKSPACE_MAP["on-prem"]="GLCP8"
-          WORKSPACE_MAP["partner-management"]="GLCP7"
-          WORKSPACE_MAP["pi-initiatives"]="GLCP34"
-          WORKSPACE_MAP["platform-architecture"]="GLCP12"
-          WORKSPACE_MAP["security"]="GLCP9"
-          WORKSPACE_MAP["sustainability"]="GLCP35"
-          WORKSPACE_MAP["ui-ux-framework"]="GLCP3"
-          WORKSPACE_MAP["unified-support-experience"]="GLCP6"
-          WORKSPACE_MAP["user-account-management"]="GLCP1"
-          # services-intake
-          WORKSPACE_MAP["hc-pc"]="GLCP17"
-          # Add additional services-intake mappings here as Aha workspaces are confirmed:
-          # WORKSPACE_MAP["aruba"]="GLCPxx"
-          # WORKSPACE_MAP["com-nonstop"]="GLCPxx"
-          # WORKSPACE_MAP["compute-hpc-ai"]="GLCPxx"
-          # WORKSPACE_MAP["flex"]="GLCPxx"
-          # WORKSPACE_MAP["hc-dscc"]="GLCPxx"
-          # WORKSPACE_MAP["hc-saas"]="GLCPxx"
-          # WORKSPACE_MAP["hc-storage"]="GLCPxx"
-          # WORKSPACE_MAP["ideas-portal"]="GLCPxx"
-          # WORKSPACE_MAP["juniper-datacenter"]="GLCPxx"
-          # WORKSPACE_MAP["opsramp"]="GLCPxx"
-          # WORKSPACE_MAP["pointnext"]="GLCPxx"
+          # ── ACTIVE mapping (test phase: hc-pc only) ──────────────────────
+          # hc-pc epics go into release GLCP17-R-1 via the release endpoint.
+          # The WORKSPACE_MAP below is preserved for when we switch to
+          # product-level posting across all folders.
+          # ─────────────────────────────────────────────────────────────────
+
+          # ── Full WORKSPACE_MAP (commented out during test phase) ──────────
+          # Uncomment this block and remove the release-scoped endpoint below
+          # to re-enable multi-folder product-level posting.
+          #
+          # declare -A WORKSPACE_MAP
+          # # capabilities
+          # WORKSPACE_MAP["api-cli-framework"]="GLCP10"
+          # WORKSPACE_MAP["commerce"]="GLCP2"
+          # WORKSPACE_MAP["compliance-certification"]="GLCP4"
+          # WORKSPACE_MAP["consumption-analytics"]="GLCP36"
+          # WORKSPACE_MAP["consumption-data-services"]="GLCP37"
+          # WORKSPACE_MAP["data-analytics"]="GLCP5"
+          # WORKSPACE_MAP["device-subscription-management"]="GLCP45"
+          # WORKSPACE_MAP["high-availability"]="GLCP11"
+          # WORKSPACE_MAP["on-prem"]="GLCP8"
+          # WORKSPACE_MAP["partner-management"]="GLCP7"
+          # WORKSPACE_MAP["pi-initiatives"]="GLCP34"
+          # WORKSPACE_MAP["platform-architecture"]="GLCP12"
+          # WORKSPACE_MAP["security"]="GLCP9"
+          # WORKSPACE_MAP["sustainability"]="GLCP35"
+          # WORKSPACE_MAP["ui-ux-framework"]="GLCP3"
+          # WORKSPACE_MAP["unified-support-experience"]="GLCP6"
+          # WORKSPACE_MAP["user-account-management"]="GLCP1"
+          # # services-intake
+          # WORKSPACE_MAP["hc-pc"]="GLCP17"
+          # # Confirm Aha workspace IDs before enabling:
+          # # WORKSPACE_MAP["aruba"]="GLCPxx"
+          # # WORKSPACE_MAP["com-nonstop"]="GLCPxx"
+          # # WORKSPACE_MAP["compute-hpc-ai"]="GLCPxx"
+          # # WORKSPACE_MAP["flex"]="GLCPxx"
+          # # WORKSPACE_MAP["hc-dscc"]="GLCPxx"
+          # # WORKSPACE_MAP["hc-saas"]="GLCPxx"
+          # # WORKSPACE_MAP["hc-storage"]="GLCPxx"
+          # # WORKSPACE_MAP["ideas-portal"]="GLCPxx"
+          # # WORKSPACE_MAP["juniper-datacenter"]="GLCPxx"
+          # # WORKSPACE_MAP["opsramp"]="GLCPxx"
+          # # WORKSPACE_MAP["pointnext"]="GLCPxx"
+          # ─────────────────────────────────────────────────────────────────
 
           FAILED=0
 
@@ -85,17 +107,6 @@ jobs:
 
             echo "──────────────────────────────────────────"
             echo "Processing: $file"
-
-            # Extract the folder name (3rd path segment):
-            # requirements / (capabilities|services-intake) / <folder> / epics|prds / file.md
-            FOLDER=$(echo "$file" | cut -d'/' -f3)
-            WORKSPACE_ID="${WORKSPACE_MAP[$FOLDER]}"
-
-            if [ -z "$WORKSPACE_ID" ]; then
-              echo "⚠️  No Aha workspace mapping for folder '$FOLDER' — skipping."
-              echo "   Add WORKSPACE_MAP[\"$FOLDER\"]=\"GLCPxx\" to the workflow to enable this folder."
-              continue
-            fi
 
             # Parse H1 heading as the epic name; fall back to the filename
             EPIC_NAME=$(grep -m1 '^# ' "$file" | sed 's/^# //' | xargs)
@@ -106,20 +117,43 @@ jobs:
             # Build description from everything after the H1 line (capped at 100 lines)
             EPIC_DESC=$(awk 'NR>1' "$file" | head -100)
 
-            echo "  Workspace : $WORKSPACE_ID"
-            echo "  Epic name : $EPIC_NAME"
+            TODAY=$(date -u +%Y-%m-%d)
 
-            # Build safe JSON payload with jq
+            echo "  Release   : $AHA_RELEASE_ID"
+            echo "  Epic name : $EPIC_NAME"
+            echo "  Req. date : $TODAY"
+
+            # Build safe JSON payload with jq.
+            # Epic is created under the GLCP17 product and pinned to release GLCP17-R-1.
+            # Mandatory fields:
+            #   name             - H1 of the markdown file
+            #   description      - body of the markdown file
+            #   release          - assigns the epic to GLCP17-R-1
+            #   custom_fields:
+            #     requested_by   - Single Select, set to null (None)
+            #     requested_date - today's date (ISO 8601)
             PAYLOAD=$(jq -n \
               --arg name "$EPIC_NAME" \
               --arg desc "$EPIC_DESC" \
-              '{epic: {name: $name, description: $desc}}')
+              --arg release "$AHA_RELEASE_ID" \
+              --arg date "$TODAY" \
+              '{
+                epic: {
+                  name: $name,
+                  description: $desc,
+                  release: {reference_num: $release},
+                  custom_fields: {
+                    requested_by: null,
+                    requested_date: $date
+                  }
+                }
+              }')
 
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST \
               -H "Authorization: Bearer $AHA_API_TOKEN" \
               -H "Content-Type: application/json" \
-              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/epics" \
+              "https://${AHA_DOMAIN}/api/v1/products/GLCP17/epics" \
               -d "$PAYLOAD")
 
             HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
