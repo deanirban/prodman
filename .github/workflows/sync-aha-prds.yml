@@ -80,6 +80,7 @@ jobs:
         env:
           AHA_API_TOKEN: ${{ secrets.AHA_API_TOKEN }}
           AHA_DOMAIN: hpepm.aha.io
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -142,18 +143,54 @@ jobs:
             PR_URL="${{ github.event.pull_request.html_url }}"
 
             FILE_BODY=$(cat "$file")
-            NOTE_BODY_RAW=$(printf "Source file: %s\nMerged PR: #%s (%s)\n\n%s" "$REPO_FILE_URL" "$PR_NUMBER" "$PR_URL" "$FILE_BODY")
-
-            # Create PRD notes at workspace root by design.
-            PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg raw "$NOTE_BODY_RAW" \
-              '{page:{name:$name, description_attributes:{body:("<pre>" + ($raw|@html) + "</pre>")}}}')
-
-            RESPONSE=$(curl -s -w "\n%{http_code}" \
-              -X POST \
-              -H "Authorization: Bearer $AHA_API_TOKEN" \
+            SOURCE_MARKER="AHA_SYNC_SOURCE:${file}"
+            NOTE_MD=$(printf "<!-- %s -->\n<!-- AHA_SYNC_KIND:prd -->\n\nSource file: [%s](%s)\nMerged PR: [#%s](%s)\n\n%s" "$SOURCE_MARKER" "$file" "$REPO_FILE_URL" "$PR_NUMBER" "$PR_URL" "$FILE_BODY")
+            RENDER_REQ=$(jq -n --arg text "$NOTE_MD" --arg repo "${{ github.repository }}" '{text:$text,mode:"gfm",context:$repo}')
+            NOTE_BODY_HTML=$(curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
-              "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages" \
-              -d "$PAYLOAD")
+              "https://api.github.com/markdown" \
+              -d "$RENDER_REQ")
+
+            EXISTING_PAGE_ID=""
+            for page in $(seq 1 5); do
+              PAGES_LIST=$(curl -s \
+                -H "Authorization: Bearer $AHA_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages?per_page=200&page=${page}")
+
+              MATCH=$(echo "$PAGES_LIST" | jq -r --arg marker "$SOURCE_MARKER" --arg name "$NOTE_NAME" '
+                (.pages // [])[]?
+                | select(((.description // "") | contains($marker)) or ((.name // "") == $name))
+                | @base64' | head -n1)
+
+              if [ -n "$MATCH" ]; then
+                ITEM=$(echo "$MATCH" | base64 -d)
+                EXISTING_PAGE_ID=$(echo "$ITEM" | jq -r '.id // ""')
+                break
+              fi
+            done
+
+            # Keep PRD notes at workspace root and preserve markdown rendering via HTML body.
+            PAYLOAD=$(jq -n --arg name "$NOTE_NAME" --arg html "$NOTE_BODY_HTML" \
+              '{page:{name:$name, parent_id:null, description_attributes:{body:$html}}}')
+
+            if [ -n "$EXISTING_PAGE_ID" ]; then
+              RESPONSE=$(curl -s -w "\n%{http_code}" \
+                -X PUT \
+                -H "Authorization: Bearer $AHA_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://${AHA_DOMAIN}/api/v1/pages/${EXISTING_PAGE_ID}" \
+                -d "$PAYLOAD")
+            else
+              RESPONSE=$(curl -s -w "\n%{http_code}" \
+                -X POST \
+                -H "Authorization: Bearer $AHA_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://${AHA_DOMAIN}/api/v1/products/${WORKSPACE_ID}/pages" \
+                -d "$PAYLOAD")
+            fi
 
             HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
             BODY=$(echo "$RESPONSE" | head -n -1)
@@ -161,7 +198,7 @@ jobs:
             if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
               REF=$(echo "$BODY" | jq -r '.page.reference_num // "unknown"')
               URL=$(echo "$BODY" | jq -r '.page.url // ""')
-              echo "Created PRD note ${REF} -> ${URL}"
+              echo "Upserted PRD note ${REF} -> ${URL}"
               LINK_LINES+="- ${file} -> ${REF} (${URL})"$'\n'
             else
               echo "Failed to create note for $file (HTTP $HTTP_CODE): $BODY"
