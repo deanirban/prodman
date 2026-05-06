@@ -305,26 +305,65 @@ jobs:
         run: |
           set -euo pipefail
 
-          MARKER="<!-- aha-sync-links:epics -->"
+          MARKER="<!-- aha-sync-links:unified -->"
           COMMENTS_API="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
 
-          COMMENT_BODY=$(cat <<'EOF'
-          <!-- aha-sync-links:epics -->
-          ## Aha Sync Links (Epics)
-
-          The following Epic files were synced to Aha:
-
-          __LINKS__
-          EOF
-          )
-
-          COMMENT_BODY="${COMMENT_BODY/__LINKS__/${{ steps.create_aha_epics.outputs.links }}}"
-
-          EXISTING_ID=$(curl -s \
+          EXISTING_JSON=$(curl -s \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "$COMMENTS_API?per_page=100" \
-            | jq -r --arg marker "$MARKER" 'map(select(.body | contains($marker))) | last.id // empty')
+            "$COMMENTS_API?per_page=100")
+
+          EXISTING_ID=$(echo "$EXISTING_JSON" | jq -r --arg marker "$MARKER" 'map(select(.body | contains($marker))) | last.id // empty')
+          EXISTING_BODY=$(echo "$EXISTING_JSON" | jq -r --arg marker "$MARKER" 'map(select(.body | contains($marker))) | last.body // empty')
+
+          if [ -z "$EXISTING_BODY" ]; then
+            EXISTING_BODY=$(cat <<'EOF'
+          <!-- aha-sync-links:unified -->
+          ## Aha Sync Links (Unified)
+
+          <!-- aha-sync-links:epics:start -->
+          ### Epics
+          - _No epic sync yet._
+          <!-- aha-sync-links:epics:end -->
+
+          <!-- aha-sync-links:prds:start -->
+          ### PRDs
+          - _No PRD sync yet._
+          <!-- aha-sync-links:prds:end -->
+          EOF
+            )
+          fi
+
+          NEW_EPIC_SECTION=$(cat <<'EOF'
+          <!-- aha-sync-links:epics:start -->
+          ### Epics
+          __LINKS__
+          <!-- aha-sync-links:epics:end -->
+          EOF
+          )
+          NEW_EPIC_SECTION="${NEW_EPIC_SECTION/__LINKS__/${{ steps.create_aha_epics.outputs.links }}}"
+
+          printf "%s\n" "$EXISTING_BODY" > /tmp/unified-existing.md
+
+          awk -v start='<!-- aha-sync-links:epics:start -->' \
+              -v end='<!-- aha-sync-links:epics:end -->' \
+              -v repl="$NEW_EPIC_SECTION" '
+            BEGIN { inblock=0 }
+            {
+              if (index($0, start)) {
+                print repl
+                inblock=1
+                next
+              }
+              if (inblock && index($0, end)) {
+                inblock=0
+                next
+              }
+              if (!inblock) print
+            }
+          ' /tmp/unified-existing.md > /tmp/unified-updated.md
+
+          COMMENT_BODY=$(cat /tmp/unified-updated.md)
 
           jq -n --arg body "$COMMENT_BODY" '{body:$body}' > /tmp/epic_comment.json
 
