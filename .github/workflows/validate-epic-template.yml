@@ -60,13 +60,13 @@ jobs:
             fi
 
             if [ ${#MISSING[@]} -gt 0 ]; then
-              echo "  ❌ Missing required sections:"
+              echo "   Missing required sections:"
               for s in "${MISSING[@]}"; do
                 echo "     - $s"
               done
               FAILED=1
             else
-              echo "  ✅ All required sections present"
+              echo "   All required sections present"
             fi
           done <<< "${{ steps.changed.outputs.files }}"
 

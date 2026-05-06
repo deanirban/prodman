@@ -216,7 +216,7 @@ jobs:
                   description: $desc,
                   release_id: $release_id,
                   custom_fields: {
-                    requested_by: "GLCP"
+                    requested_by: "Not Applicable"
                   }
                 }
               }')
